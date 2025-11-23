@@ -250,11 +250,18 @@ async function sendChatMessage() {
     
     // Disable input while processing
     input.disabled = true;
+    const loadingIndicator = document.getElementById('chat-loading');
+    loadingIndicator.classList.remove('hidden');
+    
+    // Scroll to bottom to show loading
+    const history = document.getElementById('chat-history');
+    history.scrollTop = history.scrollHeight;
 
     // Check if context exists
     if (!window.currentStockContext) {
         addMessage('system', 'Please analyze a stock first so I have context to answer your questions.');
         input.disabled = false;
+        loadingIndicator.classList.add('hidden');
         return;
     }
 
@@ -284,6 +291,8 @@ async function sendChatMessage() {
     } finally {
         input.disabled = false;
         input.focus();
+        loadingIndicator.classList.add('hidden');
+        history.scrollTop = history.scrollHeight;
     }
 }
 
