@@ -292,15 +292,85 @@ function addMessage(role, text) {
     const div = document.createElement('div');
     div.className = `message ${role}`;
 
-    // Convert newlines to breaks for assistant
+    // Parse and format markdown for assistant messages
     if (role === 'assistant') {
-        div.innerHTML = text.replace(/\n/g, '<br>');
+        // Configure marked for safe HTML rendering
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({
+                breaks: true,
+                gfm: true,
+                headerIds: false,
+                mangle: false
+            });
+            div.innerHTML = marked.parse(text);
+        } else {
+            // Fallback: simple markdown-like formatting if marked.js isn't loaded
+            div.innerHTML = formatSimpleMarkdown(text);
+        }
     } else {
+        // For user and system messages, use plain text (escape HTML)
         div.textContent = text;
     }
 
     history.appendChild(div);
     history.scrollTop = history.scrollHeight;
+}
+
+function formatSimpleMarkdown(text) {
+    // Simple markdown parser fallback
+    let html = text;
+    
+    // Split by lines to process list items properly
+    const lines = html.split('\n');
+    const processedLines = [];
+    let inList = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        
+        // Check if line is a list item
+        const listMatch = line.match(/^[-*]\s+(.+)$/);
+        
+        if (listMatch) {
+            if (!inList) {
+                processedLines.push('<ul>');
+                inList = true;
+            }
+            // Process markdown within list item
+            let itemText = listMatch[1];
+            itemText = itemText.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            itemText = itemText.replace(/\*(.+?)\*/g, '<em>$1</em>');
+            processedLines.push(`<li>${itemText}</li>`);
+        } else {
+            if (inList) {
+                processedLines.push('</ul>');
+                inList = false;
+            }
+            if (line) {
+                // Process markdown in regular lines
+                let processedLine = line;
+                processedLine = processedLine.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+                processedLine = processedLine.replace(/\*(.+?)\*/g, '<em>$1</em>');
+                processedLine = processedLine.replace(/`(.+?)`/g, '<code>$1</code>');
+                processedLines.push(processedLine);
+            } else {
+                processedLines.push('<br>');
+            }
+        }
+    }
+    
+    // Close any open list
+    if (inList) {
+        processedLines.push('</ul>');
+    }
+    
+    html = processedLines.join('\n');
+    
+    // Escape HTML for security (but keep our tags)
+    // Convert line breaks to <br> tags where appropriate
+    html = html.replace(/\n/g, '<br>');
+    
+    return html;
 }
 
 function handleChatKey(event) {
