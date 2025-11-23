@@ -2,6 +2,7 @@ import os
 import openai
 import google.generativeai as genai
 from dotenv import load_dotenv
+from chat.news_service import get_stock_news, format_news_for_llm
 
 load_dotenv()
 
@@ -13,15 +14,32 @@ def get_chat_response(provider, message, context=None, api_key=None, model=None)
     model: Specific model name to use (e.g., 'gpt-5.1', 'gemini-2.5-pro')
     """
     
+    # Check if user is asking for news/real-time info
+    news_keywords = ['news', 'latest', 'headline', 'happening', 'update', 'recent', 'why', 'moving', 'event']
+    include_news = any(keyword in message.lower() for keyword in news_keywords)
+    
     # Construct System Prompt
     system_prompt = "You are a helpful financial assistant and stock market analyst."
+    
     if context:
-        system_prompt += f"\n\nCurrent Stock Context for {context.get('ticker')}:"
+        ticker = context.get('ticker')
+        system_prompt += f"\n\nCurrent Stock Context for {ticker}:"
         system_prompt += f"\n- Current Price: ${context.get('current_price')}"
         system_prompt += f"\n- Recommendation: {context.get('recommendation')}"
         system_prompt += f"\n- RSI: {context.get('rsi')}"
         system_prompt += f"\n- SMA(50): {context.get('sma_50')}"
         system_prompt += f"\n- Key Signals: {', '.join(context.get('signals', []))}"
+        
+        # Fetch and inject news if requested or relevant
+        if include_news:
+            try:
+                news_items = get_stock_news(ticker)
+                news_context = format_news_for_llm(news_items)
+                system_prompt += f"\n\n{news_context}"
+                system_prompt += "\n\nNote: Use the provided news headlines to explain recent price movements or market sentiment if relevant."
+            except Exception as e:
+                print(f"News fetch failed: {e}")
+
         system_prompt += "\nUse this data to answer the user's questions accurately. Do not give financial advice, but explain the technical indicators."
 
     # Valid model names for validation

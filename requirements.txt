@@ -9,3 +9,4 @@ requests
 openai
 google-generativeai
 python-dotenv
+duckduckgo-search
