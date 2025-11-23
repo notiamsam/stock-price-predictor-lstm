@@ -7,3 +7,4 @@ venv/
 .vscode/
 *.sqlite3
 data/
+api_settings.json

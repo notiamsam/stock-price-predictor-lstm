@@ -27,8 +27,18 @@
         <!-- Main Content -->
         <main class="main-content">
             <header>
-                <h1>AI Stock Predictor</h1>
-                <p>Advanced LSTM Neural Network Analysis & Forecasting</p>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h1>AI Stock Predictor</h1>
+                        <p>Advanced LSTM Neural Network Analysis & Forecasting</p>
+                    </div>
+                    <button onclick="openSettings()" class="settings-btn" title="Settings">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3"></path>
+                        </svg>
+                    </button>
+                </div>
             </header>
 
             <!-- Input Section -->
@@ -42,82 +52,120 @@
                             <div id="ticker-dropdown" class="dropdown-results hidden"></div>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label for="look_back">Look-back (Days)</label>
-                        <input type="number" id="look_back" value="60" min="30" max="365">
+                    <div class="input-group">
+                        <label for="look_back">Look-Back (Days)</label>
+                        <input type="number" id="look_back" value="60" min="10" max="365">
                     </div>
-                    <div class="form-group">
+                    <div class="input-group">
                         <label for="forecast_days">Forecast (Days)</label>
                         <input type="number" id="forecast_days" value="7" min="1" max="30">
                     </div>
-                    <button id="predict-btn" class="primary-btn" onclick="predictPrice()">Analyze & Predict</button>
+                    <div class="input-group">
+                        <label for="model_type">Prediction Model</label>
+                        <select id="model_type">
+                            <option value="lstm">LSTM (Deep Learning)</option>
+                            <option value="gru">GRU (Deep Learning)</option>
+                            <option value="linear">Linear Regression (Fast)</option>
+                            <option value="random_forest">Random Forest (ML)</option>
+                            <option value="xgboost">XGBoost (ML)</option>
+                        </select>
+                    </div>
+                    <button id="predict-btn" onclick="predictPrice()" class="primary-btn">Analyze & Predict</button>
                 </div>
+
+                <div id="loading" class="hidden">
+                    <div class="spinner"></div>
+                    <p>Training model and generating predictions...</p>
+                </div>
+
                 <div id="error-msg" class="error hidden"></div>
-            </div>
 
-            <!-- Loading State -->
-            <div id="loading" class="loading-container hidden">
-                <div class="spinner"></div>
-                <h3>Running AI Analysis...</h3>
-                <p>Training LSTM model, calculating RSI, and generating forecast.</p>
-            </div>
+                <div id="results" class="hidden">
+                    <div class="chart-container">
+                        <canvas id="stockChart"></canvas>
+                    </div>
 
-            <!-- Results Section -->
-            <div id="results-section" class="results-grid hidden">
-                <!-- Chart Column -->
-                <div class="card chart-card">
-                    <h3 style="margin-bottom: 1rem;">Price Forecast</h3>
-                    <canvas id="stockChart"></canvas>
-
-                    <div class="metrics-row">
-                        <div class="metric-box">
-                            <div class="metric-label">Current Price</div>
-                            <div class="metric-value" id="current-price">--</div>
+                    <div class="analysis-grid">
+                        <div class="card recommendation-card">
+                            <h3>AI Recommendation</h3>
+                            <div id="recommendation-badge" class="badge">HOLD</div>
+                            <div id="signal-list" class="signal-list"></div>
                         </div>
-                        <div class="metric-box">
-                            <div class="metric-label">Predicted (End)</div>
-                            <div class="metric-value" id="future-price">--</div>
-                        </div>
-                        <div class="metric-box">
-                            <div class="metric-label">Model Error (RMSE)</div>
-                            <div class="metric-value" id="rmse-val">--</div>
+                        <div class="card stats-card">
+                            <h3>Technical Indicators</h3>
+                            <div class="stat-row">
+                                <span>RSI (14)</span>
+                                <span id="rsi-value">--</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>SMA (50)</span>
+                                <span id="sma-value">--</span>
+                            </div>
+                            <div class="stat-row">
+                                <span>RMSE (Error)</span>
+                                <span id="rmse-value">--</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Analysis Column -->
-                <div class="card analysis-card">
-                    <h3 style="margin-bottom: 1rem;">AI Recommendation</h3>
-
-                    <div class="recommendation-badge" id="rec-badge">
-                        <div class="rec-title">Signal</div>
-                        <div class="rec-value" id="rec-text">--</div>
-                    </div>
-
-                    <div class="indicator-list">
-                        <div class="indicator-item">
-                            <span>RSI (14)</span>
-                            <span id="rsi-val" style="font-weight: 700;">--</span>
-                        </div>
-                        <div class="indicator-item">
-                            <span>SMA (50)</span>
-                            <span id="sma-val" style="font-weight: 700;">--</span>
+                <!-- Chat Interface -->
+                <div class="chat-container">
+                    <div class="chat-header">
+                        <h3>AI Market Assistant</h3>
+                        <div class="model-selectors">
+                            <select id="chat-provider" onchange="updateModelOptions()">
+                                <option value="openai">OpenAI</option>
+                                <option value="gemini">Google Gemini</option>
+                            </select>
+                            <select id="chat-model">
+                                <option value="gpt-5.1">GPT-5.1 (Latest)</option>
+                                <option value="gpt-5-mini">GPT-5 Mini</option>
+                                <option value="gpt-4o">GPT-4o (Multimodal)</option>
+                                <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                            </select>
                         </div>
                     </div>
-
-                    <div class="signal-list">
-                        <h4>Key Signals:</h4>
-                        <ul id="signal-list">
-                            <!-- Signals injected here -->
-                        </ul>
+                    <div id="chat-history" class="chat-history">
+                        <div class="message system">
+                            Hello! I can analyze the current stock data for you. Select a stock and ask me anything.
+                        </div>
                     </div>
-
-                    <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: auto; text-align: center;">
-                        *Disclaimer: Not financial advice. For educational purposes only.
-                    </p>
+                    <div class="chat-input-area">
+                        <input type="text" id="chat-input" placeholder="Ask about this stock..."
+                            onkeypress="handleChatKey(event)">
+                        <button onclick="sendChatMessage()" class="send-btn">Send</button>
+                    </div>
                 </div>
             </div>
         </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button onclick="closeSettings()" class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="openai-key">OpenAI API Key</label>
+                    <input type="password" id="openai-key" placeholder="sk-..." autocomplete="off">
+                    <small>Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI Platform</a></small>
+                </div>
+                <div class="form-group">
+                    <label for="gemini-key">Google Gemini API Key</label>
+                    <input type="password" id="gemini-key" placeholder="AIza..." autocomplete="off">
+                    <small>Get your API key from <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a></small>
+                </div>
+                <div id="settings-status" class="status-message"></div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeSettings()" class="secondary-btn">Cancel</button>
+                <button onclick="saveSettings()" class="primary-btn">Save Settings</button>
+            </div>
+        </div>
     </div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>

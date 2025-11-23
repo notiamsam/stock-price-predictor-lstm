@@ -4,6 +4,7 @@ let stockChart = null;
 document.addEventListener('DOMContentLoaded', () => {
     fetchMarketSummary();
     setupAutocomplete();
+    updateModelOptions(); // Initialize model options based on default provider
     // Refresh market data every 60 seconds
     setInterval(fetchMarketSummary, 60000);
 });
@@ -115,9 +116,10 @@ async function predictPrice() {
     const ticker = document.getElementById('ticker').value.trim();
     const lookBack = document.getElementById('look_back').value;
     const forecastDays = document.getElementById('forecast_days').value;
+    const modelType = document.getElementById('model_type').value;
     const errorMsg = document.getElementById('error-msg');
     const loading = document.getElementById('loading');
-    const resultsSection = document.getElementById('results-section');
+    const resultsSection = document.getElementById('results');
     const predictBtn = document.getElementById('predict-btn');
 
     // Reset UI
@@ -144,7 +146,8 @@ async function predictPrice() {
             body: JSON.stringify({
                 ticker: ticker,
                 look_back: parseInt(lookBack),
-                forecast_days: parseInt(forecastDays)
+                forecast_days: parseInt(forecastDays),
+                model_type: modelType
             }),
         });
 
@@ -154,7 +157,20 @@ async function predictPrice() {
             throw new Error(data.error || 'An error occurred while fetching predictions.');
         }
 
-        renderResults(data);
+        displayResults(data);
+
+        // Store context for chat
+        window.currentStockContext = {
+            ticker: data.ticker,
+            current_price: data.analysis.current_price,
+            recommendation: data.analysis.recommendation,
+            rsi: data.analysis.rsi,
+            sma_50: data.analysis.sma_50,
+            signals: data.analysis.signals
+        };
+
+        // Add system message about new stock
+        addMessage('system', `Loaded data for ${data.ticker}. You can now ask questions about it.`);
 
     } catch (error) {
         showError(error.message);
@@ -166,42 +182,131 @@ async function predictPrice() {
 
 function showError(message) {
     const errorMsg = document.getElementById('error-msg');
-    errorMsg.textContent = message;
-    errorMsg.classList.remove('hidden');
+    if (errorMsg) {
+        errorMsg.textContent = message;
+        errorMsg.classList.remove('hidden');
+    } else {
+        alert(message);
+    }
 }
 
-function renderResults(data) {
-    const resultsSection = document.getElementById('results-section');
+function displayResults(data) {
+    const resultsSection = document.getElementById('results');
     resultsSection.classList.remove('hidden');
 
-    // Metrics
-    document.getElementById('rmse-val').textContent = data.metrics.rmse.toFixed(2);
-    document.getElementById('current-price').textContent = '$' + data.analysis.current_price.toFixed(2);
-    document.getElementById('future-price').textContent = '$' + data.summary.last_predicted_price.toFixed(2);
+    // Update Analysis Cards
+    const badge = document.getElementById('recommendation-badge');
+    badge.textContent = data.analysis.recommendation;
+    badge.style.backgroundColor = data.analysis.color;
+    badge.style.boxShadow = `0 0 15px ${data.analysis.color}40`;
 
-    // Analysis / Recommendation
-    const recBadge = document.getElementById('rec-badge');
-    const recText = document.getElementById('rec-text');
-
-    recText.textContent = data.analysis.recommendation;
-    recBadge.style.borderColor = data.analysis.color;
-    recBadge.style.boxShadow = `0 0 15px ${data.analysis.color}40`; // Add glow
-    recText.style.color = data.analysis.color;
-
-    document.getElementById('rsi-val').textContent = data.analysis.rsi.toFixed(2);
-    document.getElementById('sma-val').textContent = data.analysis.sma_50 ? '$' + data.analysis.sma_50.toFixed(2) : 'N/A';
-
-    // Signals List
     const signalList = document.getElementById('signal-list');
-    signalList.innerHTML = '';
-    data.analysis.signals.forEach(signal => {
-        const li = document.createElement('li');
-        li.textContent = signal;
-        signalList.appendChild(li);
-    });
+    signalList.innerHTML = data.analysis.signals.map(s => `<div>• ${s}</div>`).join('');
+
+    document.getElementById('rsi-value').textContent = data.analysis.rsi.toFixed(2);
+    document.getElementById('sma-value').textContent = data.analysis.sma_50 ? '$' + data.analysis.sma_50.toFixed(2) : 'N/A';
+    document.getElementById('rmse-value').textContent = data.metrics.rmse.toFixed(4);
 
     // Chart
     renderChart(data);
+}
+
+// Chat Functions
+function updateModelOptions() {
+    const provider = document.getElementById('chat-provider').value;
+    const modelSelect = document.getElementById('chat-model');
+    
+    // Clear existing options
+    modelSelect.innerHTML = '';
+    
+    if (provider === 'openai') {
+        modelSelect.innerHTML = `
+            <option value="gpt-5.1">GPT-5.1 (Latest)</option>
+            <option value="gpt-5-mini">GPT-5 Mini (Cost-optimized)</option>
+            <option value="gpt-4o">GPT-4o (Multimodal)</option>
+            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+        `;
+    } else if (provider === 'gemini') {
+        modelSelect.innerHTML = `
+            <option value="gemini-3-pro-preview">Gemini 3 Pro (Latest)</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+            <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Recommended)</option>
+            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (Fastest)</option>
+        `;
+    }
+}
+
+async function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+    const provider = document.getElementById('chat-provider').value;
+    const model = document.getElementById('chat-model').value;
+
+    if (!message) return;
+
+    // Add user message
+    addMessage('user', message);
+    input.value = '';
+    
+    // Disable input while processing
+    input.disabled = true;
+
+    // Check if context exists
+    if (!window.currentStockContext) {
+        addMessage('system', 'Please analyze a stock first so I have context to answer your questions.');
+        input.disabled = false;
+        return;
+    }
+
+    try {
+        const response = await fetch('/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                provider: provider,
+                model: model,
+                message: message,
+                context: window.currentStockContext
+            })
+        });
+
+        const data = await response.json();
+        if (data.error) {
+            addMessage('system', 'Error: ' + data.error);
+            if (data.error.includes('API key') || data.error.includes('configure')) {
+                addMessage('system', 'Please configure your API key in Settings (⚙️ icon in header).');
+            }
+        } else {
+            addMessage('assistant', data.response);
+        }
+    } catch (error) {
+        addMessage('system', 'Error communicating with server: ' + error.message);
+    } finally {
+        input.disabled = false;
+        input.focus();
+    }
+}
+
+function addMessage(role, text) {
+    const history = document.getElementById('chat-history');
+    const div = document.createElement('div');
+    div.className = `message ${role}`;
+
+    // Convert newlines to breaks for assistant
+    if (role === 'assistant') {
+        div.innerHTML = text.replace(/\n/g, '<br>');
+    } else {
+        div.textContent = text;
+    }
+
+    history.appendChild(div);
+    history.scrollTop = history.scrollHeight;
+}
+
+function handleChatKey(event) {
+    if (event.key === 'Enter') {
+        sendChatMessage();
+    }
 }
 
 function renderChart(data) {
@@ -305,3 +410,99 @@ function renderChart(data) {
         }
     });
 }
+
+// Settings Functions
+function openSettings() {
+    const modal = document.getElementById('settings-modal');
+    modal.classList.remove('hidden');
+    loadSettings();
+}
+
+function closeSettings() {
+    const modal = document.getElementById('settings-modal');
+    modal.classList.add('hidden');
+    document.getElementById('settings-status').textContent = '';
+}
+
+async function loadSettings() {
+    try {
+        const response = await fetch('/settings');
+        const data = await response.json();
+        
+        // Load existing keys (we don't get the full keys, just status)
+        // Note: In a real app, you might want to store keys encrypted
+        // For now, we'll leave fields empty for security
+        
+        // Show status if keys are configured
+        const statusDiv = document.getElementById('settings-status');
+        if (data.openai_configured && data.gemini_configured) {
+            statusDiv.textContent = '✓ Both API keys are configured';
+            statusDiv.className = 'status-message success';
+        } else if (data.openai_configured || data.gemini_configured) {
+            statusDiv.textContent = '⚠ Some API keys are not configured';
+            statusDiv.className = 'status-message warning';
+        } else {
+            statusDiv.textContent = '⚠ Please configure at least one API key to use the chat feature';
+            statusDiv.className = 'status-message warning';
+        }
+    } catch (error) {
+        console.error('Error loading settings:', error);
+    }
+}
+
+async function saveSettings() {
+    const openaiKey = document.getElementById('openai-key').value.trim();
+    const geminiKey = document.getElementById('gemini-key').value.trim();
+    const statusDiv = document.getElementById('settings-status');
+    
+    if (!openaiKey && !geminiKey) {
+        statusDiv.textContent = 'Please enter at least one API key';
+        statusDiv.className = 'status-message error';
+        return;
+    }
+    
+    try {
+        const response = await fetch('/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                openai_api_key: openaiKey,
+                gemini_api_key: geminiKey
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            statusDiv.textContent = '✓ Settings saved successfully!';
+            statusDiv.className = 'status-message success';
+            
+            // Clear the input fields after saving
+            document.getElementById('openai-key').value = '';
+            document.getElementById('gemini-key').value = '';
+            
+            // Close modal after a short delay
+            setTimeout(() => {
+                closeSettings();
+            }, 1500);
+        } else {
+            statusDiv.textContent = 'Error: ' + (data.error || 'Failed to save settings');
+            statusDiv.className = 'status-message error';
+        }
+    } catch (error) {
+        statusDiv.textContent = 'Error: ' + error.message;
+        statusDiv.className = 'status-message error';
+    }
+}
+
+// Close modal when clicking outside
+document.addEventListener('DOMContentLoaded', () => {
+    const modal = document.getElementById('settings-modal');
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeSettings();
+            }
+        });
+    }
+});

@@ -4,3 +4,8 @@ numpy
 yfinance
 tensorflow
 scikit-learn
+xgboost
+requests
+openai
+google-generativeai
+python-dotenv
